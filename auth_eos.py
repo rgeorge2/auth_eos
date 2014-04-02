@@ -12,6 +12,8 @@ import sys
 import pexpect
 import subprocess
 import logging
+import time
+import urllib2
 
 LOG_FORMAT = "%(levelname)s: %(message)s"
 
@@ -67,7 +69,30 @@ def aklog(cells):
         logging.info("Getting token for {}".format(cell))
         subprocess.call(["aklog", "-c", cell, "-k", REALM])
 
+def is_connected_by_poll_google():
+    try:
+        urllib2.urlopen("http://www.google.com").close()
+    except urllib2.URLError:
+        return False
+    else:
+        return True
+
+def wait_for_connection(is_connected=is_connected_by_poll_google, timeout=30, interval=2):
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        if is_connected():
+            logging.info("Connection available")
+            return True
+        logging.warn("Connection unavailable, retrying.")
+        time.sleep(interval)
+
+    return False
+
 def authenticate(user, passwd, cells=CELLS):
+    logging.info("Checking for connectivity.")
+    if not wait_for_connection():
+        logging.error("No connection available.")
+        sys.exit(1)
     user_fq = "{}@{}".format(user, REALM)
     logging.info("Getting ticket-granting ticket through kinit.")
     kinit(user_fq, passwd)
